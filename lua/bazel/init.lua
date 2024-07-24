@@ -62,6 +62,21 @@ local function get_executable(target, workspace)
 	return workspace .. "/" .. executable:gsub("//", "bazel-bin/")
 end
 
+local function get_bazel_targets(lines)
+	local targets = {}
+	for _, line in ipairs(lines) do
+		local target = line:match(".*//.*:.*")
+		if target then
+			table.insert(targets, line)
+		end
+	end
+	return targets
+end
+
+local function escape_regex(str)
+	return str:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+end
+
 local function call_with_bazel_targets(callback)
 	local fname = vim.fn.expand("%:p")
 	local workspace = M.get_workspace(fname)
@@ -69,19 +84,31 @@ local function call_with_bazel_targets(callback)
 		print("Not in a bazel workspace.")
 		return
 	end
-	local fname_rel = fname:match(workspace .. "/(.*)")
+	local fname_rel = fname:match(escape_regex(workspace) .. "/(.*)")
 	local function query_targets(bazel_info)
-		local file_label = bazel_info.stdout[1]
-		local file_package = file_label:match("(.*):")
-		local function query_cmd(attr)
-			return "attr(" .. attr .. "," .. file_label .. "," .. file_package .. ":*)"
+		local file_targets = get_bazel_targets(bazel_info.stdout)
+		if #file_targets == 0 then
+			print("No bazel targets found for this file")
+			return
 		end
-		M.query("'" .. query_cmd("srcs") .. " union " .. query_cmd("hdrs") .. "'", {
-			workspace = bazel_info.workspace,
-			on_success = function(bazel_info_)
-				callback(bazel_info_.stdout)
-			end,
-		})
+		local file_label = file_targets[1]
+		local file_package = file_label:match("(.*):")
+		if file_package then
+			local function query_cmd(attr)
+				return "attr(" .. attr .. "," .. file_label .. "," .. file_package .. ":*)"
+			end
+			M.query("'" .. query_cmd("srcs") .. " union " .. query_cmd("hdrs") .. "'", {
+				workspace = bazel_info.workspace,
+				on_success = function(bazel_info_)
+					local targets = get_bazel_targets(bazel_info_.stdout)
+					if #targets == 0 then
+						print("No bazel targets found for this file.")
+					else
+						callback(targets)
+					end
+				end,
+			})
+		end
 	end
 	M.query(fname_rel, { on_success = query_targets, workspace = workspace })
 end
@@ -213,8 +240,15 @@ function M.execute(command, args, opts)
 	local workspace = opts.workspace or M.get_workspace()
 	create_window()
 	local bazel_cmd = vim.g.bazel_cmd or "bazel"
+	local whole_cmd = bazel_cmd .. " " .. command .. " " .. args
 	vim.fn.termopen(
-		bazel_cmd .. " " .. command .. " " .. args,
+		-- Echo command and arguments to the terminal
+		-- This is useful for debugging.
+		"("
+			.. whole_cmd
+			.. " 2>&1) || (echo 'bazel command: "
+			.. whole_cmd
+			.. " failed'; exit 1)",
 		get_options(command, workspace, opts, get_bazel_info(workspace, { target = opts.target }))
 	)
 	vim.fn.feedkeys("G")
