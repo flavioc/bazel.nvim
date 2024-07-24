@@ -10,7 +10,7 @@
 ### Installation
 Use your favorite package manager. Example lazy.nvim:
 ```lua
- return {'alexander-born/bazel.nvim', dependencies = {'nvim-treesitter/nvim-treesitter'} },
+ return {'flavioc/bazel.nvim', dependencies = {'nvim-treesitter/nvim-treesitter'} },
 ```
 
 ### Configuration
@@ -26,6 +26,14 @@ GoToBazelTarget()            " Jumps to the BUILD file of current buffer
 GetLabel()                   " Returns bazel label of target in build file
 ```
 These can be called from lua via `vim.fn.GoToBazelDefinition()` or from the command line via `:call GoToBazelDefinition()`.
+
+### vim commands:
+```viml
+:Bazel                          " Invoke bazel command with current buffer or custom arguments
+```
+Can be used to invoke bazel commands from neovim with `:Bazel {command} [argument...]`.
+
+If no arguments are given, the command will be invoked with the current buffer as argument, so for example, `:Bazel build` will build the direct targets using that file.
 
 ### lua functions:
 ```lua
