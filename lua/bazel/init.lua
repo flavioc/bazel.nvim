@@ -25,6 +25,7 @@ local function find_any_file(path, files)
 			return result
 		end
 	end
+	return nil
 end
 
 local function get_workspace_file(path)
@@ -32,11 +33,18 @@ local function get_workspace_file(path)
 end
 
 function M.get_workspace(path)
-	return vim.fn.fnamemodify(get_workspace_file(path), ":h")
+	local workspace_file = get_workspace_file(path)
+	if workspace_file == nil then
+		return nil
+	end
+	return vim.fn.fnamemodify(workspace_file, ":h")
 end
 
 function M.get_workspace_name(path)
 	local workspace_file = get_workspace_file(path)
+	if workspace_file == nil then
+		return nil
+	end
 	local workspace_content = vim.fn.system("cat " .. workspace_file)
 	return workspace_content:match('workspace%(name = "(.-)"%)')
 end
@@ -238,6 +246,10 @@ end
 function M.execute(command, args, opts)
 	opts = opts or {}
 	local workspace = opts.workspace or M.get_workspace()
+	if workspace == nil then
+		print("Not in a bazel workspace.")
+		return
+	end
 	create_window()
 	local bazel_cmd = vim.g.bazel_cmd or "bazel"
 	local whole_cmd = bazel_cmd .. " " .. command .. " " .. args
