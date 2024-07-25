@@ -7,11 +7,11 @@ vim.api.nvim_create_user_command("Bazel", function(opts)
 	end
 	if #opts.fargs < 2 then
 		-- Run by checking the current file.
-		return bazel.run_here(opts.fargs[1], "", {})
+		return bazel.run_here(opts.fargs[1], "", { verbose = true })
 	end
 	local command = opts.fargs[1]
 	local args = table.concat(opts.fargs, " ", 2)
-	bazel.execute(command, args, {})
+	bazel.execute(command, args, { verbose = true })
 end, {
 	nargs = "*",
 	complete = function(arg_lead)

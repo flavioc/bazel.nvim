@@ -107,6 +107,7 @@ local function call_with_bazel_targets(callback)
 			end
 			M.query("'" .. query_cmd("srcs") .. " union " .. query_cmd("hdrs") .. "'", {
 				workspace = bazel_info.workspace,
+				verbose = false,
 				on_success = function(bazel_info_)
 					local targets = get_bazel_targets(bazel_info_.stdout)
 					if #targets == 0 then
@@ -118,7 +119,7 @@ local function call_with_bazel_targets(callback)
 			})
 		end
 	end
-	M.query(fname_rel, { on_success = query_targets, workspace = workspace })
+	M.query(fname_rel, { on_success = query_targets, workspace = workspace, verbose = false })
 end
 
 function M.call_with_bazel_target(callback)
@@ -132,18 +133,23 @@ function M.call_with_bazel_target(callback)
 			callback(targets[1])
 		end
 		if n > 1 then
-			vim.ui.select(targets, { prompt = "Choose bazel target:" }, function(target)
-				if target ~= nil then
-					callback(target)
-				end
-			end)
+			if vim.g.bazel_run_first_target then
+				callback(targets[1])
+				return
+			else
+				vim.ui.select(targets, { prompt = "Choose bazel target:" }, function(target)
+					if target ~= nil then
+						callback(target)
+					end
+				end)
+			end
 		end
 	end
 	call_with_bazel_targets(choice)
 end
 
 local function create_window()
-	local new_buf = nil
+	local old_buf = nil
 	if
 		vim.tbl_count(vim.api.nvim_list_wins()) == 1
 		or vim.g.bazel_win == nil
@@ -151,14 +157,17 @@ local function create_window()
 	then
 		vim.cmd("new")
 		vim.g.bazel_win = vim.api.nvim_get_current_win()
-		new_buf = vim.api.nvim_get_current_buf()
+		old_buf = vim.api.nvim_get_current_buf()
 	else
 		vim.api.nvim_set_current_win(vim.g.bazel_win)
 	end
-	vim.api.nvim_win_set_buf(vim.g.bazel_win, vim.api.nvim_create_buf(false, true))
-	if new_buf ~= nil then
-		vim.api.nvim_buf_delete(new_buf, {})
+	local new_buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_name(new_buf, "bazel")
+	vim.api.nvim_win_set_buf(vim.g.bazel_win, new_buf)
+	if old_buf ~= nil then
+		vim.api.nvim_buf_delete(old_buf, {})
 	end
+	return new_buf
 end
 
 local function close_window()
@@ -187,7 +196,6 @@ end
 local function get_options(command, workspace, opts, bazel_info)
 	opts = opts or {}
 	local result = {
-		cwd = workspace,
 		on_exit = function(_, success)
 			if success ~= 0 then
 				return
@@ -200,6 +208,7 @@ local function get_options(command, workspace, opts, bazel_info)
 	}
 	if command == "cquery" or command == "query" then
 		bazel_info.stdout = {}
+		result.cwd = workspace
 		result.stdout_buffered = true
 		result.on_stdout = function(_, stdout)
 			for _, line in pairs(stdout) do
@@ -250,19 +259,24 @@ function M.execute(command, args, opts)
 		print("Not in a bazel workspace.")
 		return
 	end
-	create_window()
+	local new_buf = create_window()
 	local bazel_cmd = vim.g.bazel_cmd or "bazel"
-	local whole_cmd = bazel_cmd .. " " .. command .. " " .. args
+	local full_bazel_cmd = bazel_cmd .. " " .. command .. " " .. args
+	local full_cmd = "("
+		.. full_bazel_cmd
+		.. " 2>&1) || (echo 'bazel command: "
+		.. full_bazel_cmd
+		.. " failed'; exit 1)"
+	if opts.verbose then
+		full_cmd = "echo Working directory: $(pwd) " .. "; " .. "echo Running: '" .. full_bazel_cmd .. "'; " .. full_cmd
+	end
 	vim.fn.termopen(
-		-- Echo command and arguments to the terminal
-		-- This is useful for debugging.
-		"("
-			.. whole_cmd
-			.. " 2>&1) || (echo 'bazel command: "
-			.. whole_cmd
-			.. " failed'; exit 1)",
+		full_cmd,
 		get_options(command, workspace, opts, get_bazel_info(workspace, { target = opts.target }))
 	)
+	if opts.verbose then
+		vim.api.nvim_buf_set_name(new_buf, full_bazel_cmd)
+	end
 	vim.fn.feedkeys("G")
 end
 
