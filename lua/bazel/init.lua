@@ -85,6 +85,38 @@ local function escape_regex(str)
 	return str:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
 end
 
+-- Retrieves the bazel package of the current file and calls the callback with it.
+function M.call_with_bazel_package(callback)
+	local workspace = M.get_workspace()
+	if workspace == nil then
+		print("Not in a bazel workspace.")
+		return
+	end
+	local fname = vim.fn.expand("%:p")
+	local fname_rel = fname:match(escape_regex(workspace) .. "/(.*)")
+	local function query_targets(bazel_info)
+		local file_targets = get_bazel_targets(bazel_info.stdout)
+		if #file_targets == 0 then
+			print("No bazel targets found for this file")
+			return
+		end
+		local file_label = file_targets[1]
+		local file_package = file_label:match("(.*):")
+		if file_package then
+			callback(file_package)
+		end
+	end
+	M.query(fname_rel, { on_success = query_targets, workspace = workspace, verbose = false })
+end
+
+-- Runs a bazel command on the target of the package of the current file.
+-- target: target to run, e.g. ":all", "/...", ":*", ":all-targets" or a specific target.
+function M.run_here_on_package(command, target, args, opts)
+	M.call_with_bazel_package(function(package)
+		M.run(command, args, package .. target, M.get_workspace(), opts)
+	end)
+end
+
 local function call_with_bazel_targets(callback)
 	local fname = vim.fn.expand("%:p")
 	local workspace = M.get_workspace(fname)

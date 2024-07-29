@@ -29,7 +29,7 @@ These can be called from lua via `vim.fn.GoToBazelDefinition()` or from the comm
 
 ### vim commands:
 ```viml
-:Bazel                          " Invoke bazel command with current buffer or custom arguments
+:Bazel                       " Invoke bazel command with current buffer or custom arguments
 ```
 Can be used to invoke bazel commands from neovim with `:Bazel {command} [argument...]`.
 
@@ -41,6 +41,7 @@ local bazel = require("bazel")
 
 bazel.run_last()
 bazel.run_here(command, args, opts)
+bazel.run_here_on_package(command, target, args, opts)
 bazel.query(args, opts)
 bazel.cquery(args, opts)
 
